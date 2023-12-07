@@ -1,29 +1,106 @@
-from bcc import BPF
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
 
-# eBPF program
-prog = """
-#include <linux/mm.h>
 
-int monitor_pte_access(struct pt_regs *ctx, struct vm_area_struct *vma, unsigned long address) {
-    pte_t *pte;
+#define PAGEMAP_LENGTH 8
+#define PAGE_SIZE 4096
 
-    // Check
-    if (pte_young(*pte))
-        bpf_trace_printk("Access bit set for address %lx\\n", address);
-    else
-        bpf_trace_printk("Access bit not set for address %lx\\n", address);
+// Function to read from /proc/[pid]/pagemap
+int read_pagemap(char *path, unsigned long offset, uint64_t *value) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        perror("Can't open pagemap");
+        return -1;
+    }
+
+    if (lseek(fd, offset, SEEK_SET) == -1) {
+        perror("Can't seek in pagemap");
+        close(fd);
+        return -1;
+    }
+
+    ssize_t bytes_read = read(fd, value, PAGEMAP_LENGTH);
+    if (bytes_read < 0) {
+        perror("Can't read pagemap");
+        close(fd);
+        return -1;
+    }
+
+    if (bytes_read != PAGEMAP_LENGTH) {
+        fprintf(stderr, "Short read from pagemap: %zd bytes\n", bytes_read);
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+// Function to clear referenced bits
+int clear_refs(char *path) {
+    int fd = open(path, O_WRONLY);
+    if (fd < 0) {
+        perror("Can't open clear_refs");
+        return -1;
+    }
+
+    if (write(fd, "1", 1) != 1) {
+        perror("Can't write to clear_refs");
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <pid>\n", argv[0]);
+        return 1;
+    }
+
+    pid_t pid = (pid_t)atoi(argv[1]);
+    char pagemap_path[256], clear_refs_path[256];
+    snprintf(pagemap_path, sizeof(pagemap_path), "/proc/%d/pagemap", pid);
+    snprintf(clear_refs_path, sizeof(clear_refs_path), "/proc/%d/clear_refs", pid);
+
+    // You should calculate these based on the actual memory mapping of the process
+    unsigned long start_addr = 0x400000;
+    unsigned long end_addr = 0x4FF000;
+
+    while (1) {
+        int accessed_pages = 0;
+
+        for (unsigned long addr = start_addr; addr < end_addr; addr += PAGE_SIZE) {
+            unsigned long offset = (addr / PAGE_SIZE) * PAGEMAP_LENGTH;
+            uint64_t entry;
+
+            if (read_pagemap(pagemap_path, offset, &entry) == -1) {
+                continue;
+            }
+
+            // Check the accessed bit (bit 5) in the pagemap entry
+            if ((entry >> 5) & 1) {
+                accessed_pages++;
+            }
+        }
+
+        printf("Accessed pages: %d\n", accessed_pages);
+
+        // Clear the accessed bits
+        if (clear_refs(clear_refs_path) == -1) {
+            break;
+        }
+
+        // Sleep for a while before checking again
+        sleep(10); // Example: 10 seconds
+    }
 
     return 0;
 }
-"""
-
-b = BPF(text=prog)
-
-b.attach_kprobe(event="handle_pte_fault", fn_name="monitor_pte_access")
-
-while True:
-    try:
-        (task, pid, cpu, flags, ts, msg) = b.trace_fields()
-        print("%-18.9f %-16s %-6d %s" % (ts, task, pid, msg))
-    except KeyboardInterrupt:
-        exit()

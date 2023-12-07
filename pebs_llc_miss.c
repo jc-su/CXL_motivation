@@ -1,6 +1,8 @@
 #define _GNU_SOURCE
 #include <asm/unistd.h>
+#include <errno.h>
 #include <linux/perf_event.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,49 +11,70 @@
 
 static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
                             int cpu, int group_fd, unsigned long flags) {
-  int ret;
-
-  ret = syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
-  return ret;
+  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
 }
 
 int main(int argc, char **argv) {
   struct perf_event_attr pe;
-  long long count;
-  int fd;
-  pid_t target_pid;
-
-  if (argc != 2) {
-    fprintf(stderr, "Usage: %s <pid>\n", argv[0]);
-    exit(EXIT_FAILURE);
-  }
-
-  target_pid = atoi(argv[1]);
+  int fd_misses, fd_accesses;
+  uint64_t misses, accesses;
+  ssize_t readSize;
 
   memset(&pe, 0, sizeof(struct perf_event_attr));
-  pe.type = PERF_TYPE_RAW;
+  pe.type = PERF_TYPE_HARDWARE;
   pe.size = sizeof(struct perf_event_attr);
-  pe.config = 0x412e; // MEM_LOAD_RETIRED.L3_MISS
+  pe.config = PERF_COUNT_HW_CACHE_MISSES;
   pe.disabled = 1;
   pe.exclude_kernel = 1;
   pe.exclude_hv = 1;
 
-  fd = perf_event_open(&pe, target_pid, -1, -1, 0);
-  if (fd == -1) {
-    fprintf(stderr, "Error opening event %llx for pid %d\n", pe.config,
-            target_pid);
+  fd_misses = perf_event_open(&pe, 0, -1, -1, 0);
+  if (fd_misses == -1) {
+    fprintf(stderr, "Error opening event for cache misses: %s\n",
+            strerror(errno));
     exit(EXIT_FAILURE);
   }
 
-  ioctl(fd, PERF_EVENT_IOC_RESET, 0);
-  ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+  pe.config = PERF_COUNT_HW_CACHE_REFERENCES;
 
-  // foo
+  fd_accesses = perf_event_open(&pe, 0, -1, -1, 0);
+  if (fd_accesses == -1) {
+    fprintf(stderr, "Error opening event for cache accesses: %s\n",
+            strerror(errno));
+    close(fd_misses);
+    exit(EXIT_FAILURE);
+  }
 
-  ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
-  read(fd, &count, sizeof(long long));
+  ioctl(fd_misses, PERF_EVENT_IOC_RESET, 0);
+  ioctl(fd_misses, PERF_EVENT_IOC_ENABLE, 0);
+  ioctl(fd_accesses, PERF_EVENT_IOC_RESET, 0);
+  ioctl(fd_accesses, PERF_EVENT_IOC_ENABLE, 0);
 
-  printf("Process %d had %lld L3 cache misses\n", target_pid, count);
+  sleep(10);
 
-  close(fd);
+  ioctl(fd_misses, PERF_EVENT_IOC_DISABLE, 0);
+  ioctl(fd_accesses, PERF_EVENT_IOC_DISABLE, 0);
+
+  readSize = read(fd_misses, &misses, sizeof(misses));
+  if (readSize != sizeof(misses)) {
+    fprintf(stderr, "Error reading cache misses\n");
+  }
+
+  readSize = read(fd_accesses, &accesses, sizeof(accesses));
+  if (readSize != sizeof(accesses)) {
+    fprintf(stderr, "Error reading cache accesses\n");
+  }
+
+  close(fd_misses);
+  close(fd_accesses);
+
+  printf("Cache Misses: %lu\n", misses);
+  printf("Cache Accesses: %lu\n", accesses);
+
+  if (accesses > 0) {
+    double miss_rate = (double)misses / accesses;
+    printf("Cache miss rate: %.2f%%\n", miss_rate * 100);
+  }
+
+  return 0;
 }

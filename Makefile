@@ -1,5 +1,5 @@
-CC=cc
-CFLAGS=-I.
+CC=c++
+CFLAGS=-I. -std=c++20
 
-pebs_monitor: pebs_monitor.c
-	$(CC) -o pebs_monitor pebs_monitor.c $(CFLAGS)
+PerfEvent: PerfEvent.c
+	$(CC) -o PerfEvent PerfEvent.c $(CFLAGS)
