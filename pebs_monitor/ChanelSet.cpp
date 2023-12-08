@@ -301,6 +301,20 @@ public:
     }
 
     struct epoll_event events[10]; // Adjust size
+    //  EPOLLIN | EPOLLHUP;
+
+    for (auto &entry : m_entries) {
+      for (size_t i = 0; i < m_types.size(); ++i) {
+        struct epoll_event event {};
+        event.events = EPOLLIN | EPOLLHUP;
+        event.data.ptr = &entry.channels[i];
+        if (epoll_ctl(m_epollfd, EPOLL_CTL_ADD, entry.channels[i].getPerfFd(),
+                      &event) < 0) {
+          return Error([] {}, -errno, true, "epoll_ctl failed");
+        }
+      }
+    }
+    
     int num_events = epoll_wait(m_epollfd, events, 10, timeout);
     if (num_events < 0) {
       return Error([] {}, -errno, true, "epoll_wait failed");
@@ -343,6 +357,29 @@ void on_sample(void *privdata, Channel::Sample *sample) {
             << ", CPU = " << sample->cpu << ", PID = " << sample->pid
             << ", TID = " << sample->tid << ", Address = " << std::hex
             << sample->address << std::dec << std::endl;
+}
+
+struct PageInfo {
+  unsigned long address;
+  unsigned int accessCount;
+  time_t lastAccessTime;
+  bool isHot;
+};
+
+const unsigned int HOT_ACCESS_THRESHOLD = 1;
+const time_t CLASSIFICATION_PERIOD = 60;
+
+void classifyPages(std::unordered_map<unsigned long, PageInfo> &pages) {
+  for (auto &it : pages) {
+    PageInfo &page = it.second;
+    if (page.accessCount > HOT_ACCESS_THRESHOLD) {
+      page.isHot = true;
+    } else {
+      page.isHot = false;
+    }
+    // Reset access count after classification
+    page.accessCount = 0;
+  }
 }
 
 int main(int argc, char *argv[]) {
