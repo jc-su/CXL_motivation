@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <string>
 #include <sys/ioctl.h>
-#include <unistd.h>
 #include <thread>
+#include <unistd.h>
 
 class PerfEvent {
 public:
@@ -58,15 +58,12 @@ private:
 
 int main() {
   try {
-    // Replace these with the specific hardware event types and configurations
-    // for your CPU
     PerfEvent llcMisses(PERF_TYPE_HARDWARE, PERF_COUNT_HW_CACHE_LL);
     PerfEvent dtlbMisses(PERF_TYPE_HARDWARE, PERF_COUNT_HW_CACHE_DTLB);
 
     llcMisses.start();
     dtlbMisses.start();
 
-    // Simulate workload for 10 seconds
     std::this_thread::sleep_for(std::chrono::seconds(10));
 
     llcMisses.stop();

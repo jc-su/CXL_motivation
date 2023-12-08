@@ -15,7 +15,7 @@
 #include <vector>
 
 constexpr int PERF_PAGES = 2;
-constexpr __u64 SAMPLE_PERIOD = 1000; // Adjust as needed
+constexpr __u64 SAMPLE_PERIOD = 1000;
 
 class PerfEvent {
 public:

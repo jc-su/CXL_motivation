@@ -10,7 +10,6 @@
 #define PAGEMAP_LENGTH 8
 #define PAGE_SIZE 4096
 
-// Function to read from /proc/[pid]/pagemap
 int read_pagemap(char *path, unsigned long offset, uint64_t *value) {
     int fd = open(path, O_RDONLY);
     if (fd < 0) {
@@ -41,7 +40,6 @@ int read_pagemap(char *path, unsigned long offset, uint64_t *value) {
     return 0;
 }
 
-// Function to clear referenced bits
 int clear_refs(char *path) {
     int fd = open(path, O_WRONLY);
     if (fd < 0) {
@@ -70,7 +68,7 @@ int main(int argc, char *argv[]) {
     snprintf(pagemap_path, sizeof(pagemap_path), "/proc/%d/pagemap", pid);
     snprintf(clear_refs_path, sizeof(clear_refs_path), "/proc/%d/clear_refs", pid);
 
-    // You should calculate these based on the actual memory mapping of the process
+    // just example: 0x400000 - 0x4FF000
     unsigned long start_addr = 0x400000;
     unsigned long end_addr = 0x4FF000;
 
@@ -84,8 +82,6 @@ int main(int argc, char *argv[]) {
             if (read_pagemap(pagemap_path, offset, &entry) == -1) {
                 continue;
             }
-
-            // Check the accessed bit (bit 5) in the pagemap entry
             if ((entry >> 5) & 1) {
                 accessed_pages++;
             }
@@ -93,13 +89,11 @@ int main(int argc, char *argv[]) {
 
         printf("Accessed pages: %d\n", accessed_pages);
 
-        // Clear the accessed bits
         if (clear_refs(clear_refs_path) == -1) {
             break;
         }
 
-        // Sleep for a while before checking again
-        sleep(10); // Example: 10 seconds
+        sleep(10);
     }
 
     return 0;
