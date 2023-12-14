@@ -49,6 +49,7 @@ public:
     // Counter=0,1,2,3 CounterHTOff=0,1,2,3
     // PEBS:[PreciseEventingIP]
     LLC_MISSES = 0x01D3,
+    // LOAD
   };
 
   struct Sample {
@@ -157,7 +158,8 @@ public:
       tail += entry->header.size;
       if (entry->header.type == PERF_RECORD_SAMPLE && entry->id == m_id &&
           entry->pid == m_pid) {
-        sample->type = m_type;
+            // copy operation
+        sample->type = m_type; // LLC_MISSES or LOAD
         sample->cpu = entry->cpu;
         sample->pid = entry->pid;
         sample->tid = entry->tid;
