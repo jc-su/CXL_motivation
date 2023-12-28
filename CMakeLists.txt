@@ -11,7 +11,10 @@ add_compile_options(-Wall -pthread)
 find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 
-add_executable(ChanelSet pebs_monitor/ChanelSet.cpp)
-target_link_libraries(ChanelSet spdlog::spdlog fmt::fmt)
+# add_executable(ChanelSet pebs_monitor/ChanelSet.cpp)
+# target_link_libraries(ChanelSet spdlog::spdlog fmt::fmt)
 
-add_executable(PerfEvent pebs_monitor/PerfEvent.cpp)
+# add_executable(PerfEvent pebs_monitor/PerfEvent.cpp)
+
+
+add_executable(CXLMem cxl_test/cxl_mem.cpp)

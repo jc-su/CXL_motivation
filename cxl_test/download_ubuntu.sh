@@ -1,0 +1,1 @@
+wget https://cdimage.ubuntu.com/ubuntu-server/daily-live/pending/noble-live-server-amd64.iso
